@@ -1,0 +1,30 @@
+# roles/mariadb/tasks/unix-socket-plugin.yml
+---
+# Shell is unfortunately necessary because the mysql_user module doesn't yet
+# support plugin changes.
+- name: Enable plugin unix_socket
+  shell: >
+    mysql -S /var/run/mysqld/mysqld.sock -e
+    "INSTALL PLUGIN unix_socket SONAME 'auth_socket'"
+  register: plugin_install_result
+  changed_when: plugin_install_result.rc == 0
+  failed_when: (plugin_install_result.rc|int != 0) and ('already installed' not in plugin_install_result.stderr)
+  no_log: false
+  tags: mariadb
+
+- name: Check for unix_socket in plugin column
+  shell: >
+    mysql -N -s -S {{ mariadb_socket }} -e
+    "SELECT plugin from mysql.user WHERE user = 'root'"
+  register: plugin_root_result
+  changed_when: plugin_root_result.stdout is not search('unix_socket')
+  no_log: false
+  tags: mariadb
+
+- name: Update root user to use unix_socket
+  shell: >
+    mysql -S {{ mariadb_socket }} -e
+    "ALTER USER root@localhost identified via  unix_socket; FLUSH PRIVILEGES;"
+  when: plugin_root_result.stdout is not search('unix_socket')
+  no_log: false
+  tags: mariadb

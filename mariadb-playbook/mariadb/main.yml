@@ -1,0 +1,65 @@
+---
+- hosts:  all
+  vars:
+    - ansible_distribution: Ubuntu
+    - ansible_distribution_release: focal
+    - mariadb_version: '10.6'
+
+  tasks:
+    - include_vars: "default-vars.yml"
+    - include_vars: "{{ ansible_distribution }}.yml"
+
+    - name: Print message
+      debug:
+        msg: Hello MariaDB Ansible Playbook
+    
+    - name: Set discovered Ansible Python interpreter
+      set_fact:
+        ansible_python_interpreter: "{{ ansible_facts.python.executable }}"
+      when: ansible_python_interpreter is not defined
+      tags: mariadb
+    
+    - name: Add an Apt signing key from URL
+      become: yes
+      apt_key:
+        url: "{{ mariadb_pgp_key }}"
+        state: present
+      tags: mariadb
+    
+    - name: Add official Mariadb repository
+      become: yes
+      apt_repository:
+        repo: "{{ mariadb_apt_repositories  }}"
+        state: present
+      tags: mariadb
+
+    - name: Install MariaDB
+      become: yes
+      apt:
+        name: "{{ mariadb_packages }}"
+        state: latest
+        update_cache: yes
+      tags: mariadb
+
+    - name: Install MySQL-python
+      become: yes
+      apt:
+        name: python3-pymysql
+        state: latest
+      tags: mariadb
+
+    - include_tasks: config.yml
+      args:
+        apply:
+          become: yes
+
+    - include_tasks: auth-unix-plugin.yml
+      args:
+        apply:
+          become: yes
+
+  handlers:
+    - name: restart mariadb
+      service:
+        name: "{{ mariadb_service }}"
+        state: restarted
